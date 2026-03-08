@@ -1,22 +1,160 @@
 package com.example.myapplication
 
-// Shared data holder for plant information (Add Plant flow)
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+
+// ==========================================
+// Saved Plant model
+// ==========================================
+data class SavedPlant(
+    val id: String = System.currentTimeMillis().toString(),
+    val name: String,
+    val nickname: String = "",
+    val age: String = "",
+    val aiAdvice: String = "",
+    val healthScore: Int = (65..95).random(),
+    val soilMoisture: String = "${(18..45).random()}%",
+    val lightLevel: String = listOf("Low", "Medium", "High").random(),
+    val humidity: String = "${(25..60).random()}%",
+    val waterReminder: String = "Water within ${listOf(6, 12, 24, 48).random()} hours"
+)
+
+// ==========================================
+// Activity log entry
+// ==========================================
+data class ActivityEntry(
+    val timestamp: Long = System.currentTimeMillis(),
+    val description: String,
+    val icon: String = "info" // "plant", "water", "alert", "search", "info"
+)
+
+// ==========================================
+// Care guide history entry
+// ==========================================
+data class CareGuideEntry(
+    val plantName: String,
+    val nickname: String = "",
+    val age: String = "",
+    val advice: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+// ==========================================
+// Alert entry
+// ==========================================
+data class AlertEntry(
+    val title: String,
+    val message: String,
+    val severity: String = "warning", // "critical", "warning", "info"
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+// ==========================================
+// Global shared state
+// ==========================================
 object PlantDataHolder {
     var plantName: String = ""
     var plantAge: String = ""
     var plantNickname: String = ""
 }
 
+object AppState {
+    // Saved plants from AI care guide
+    val savedPlants = mutableStateListOf<SavedPlant>()
+
+    // Activity log
+    val activityLog = mutableStateListOf<ActivityEntry>().apply {
+        // Pre-populate with some initial activities
+        add(ActivityEntry(description = "App launched for the first time", icon = "info"))
+        add(ActivityEntry(description = "Environment sensors initialized", icon = "info"))
+        add(ActivityEntry(description = "UV Light plant dashboard viewed", icon = "plant"))
+    }
+
+    // Care guide search history
+    val careGuideHistory = mutableStateListOf<CareGuideEntry>()
+
+    // Simulated alerts
+    val alerts = mutableStateListOf<AlertEntry>().apply {
+        add(AlertEntry(
+            title = "Low Soil Moisture - UV Light Plant",
+            message = "Soil moisture dropped to 22%. Water within 12 hours to prevent stress.",
+            severity = "warning"
+        ))
+        add(AlertEntry(
+            title = "Critical Humidity - No Light Plant",
+            message = "Humidity at 28%, well below the 45% minimum. Consider using a humidifier.",
+            severity = "critical"
+        ))
+        add(AlertEntry(
+            title = "Light Exposure Optimal",
+            message = "Natural Light plant receiving 8,400 lux average. No action needed.",
+            severity = "info"
+        ))
+        add(AlertEntry(
+            title = "Watering Overdue - No Light Plant",
+            message = "Last watered 6 days ago. Immediate watering recommended.",
+            severity = "critical"
+        ))
+        add(AlertEntry(
+            title = "Temperature Rising",
+            message = "Leaf temperature at 83.4°F, above optimal range of 72-78°F.",
+            severity = "warning"
+        ))
+        add(AlertEntry(
+            title = "CO₂ Levels Normal",
+            message = "Average CO₂ at 416 ppm. Within acceptable indoor range.",
+            severity = "info"
+        ))
+    }
+
+    // Helper: add plant to shelf
+    fun addPlantToShelf(name: String, nickname: String, age: String, advice: String) {
+        val plant = SavedPlant(
+            name = name,
+            nickname = nickname,
+            age = age,
+            aiAdvice = advice
+        )
+        savedPlants.add(plant)
+        activityLog.add(0, ActivityEntry(
+            description = "Added \"${if (nickname.isNotBlank()) nickname else name}\" to plant shelf",
+            icon = "plant"
+        ))
+    }
+
+    // Helper: log care guide search
+    fun logCareGuideSearch(name: String, nickname: String, age: String, advice: String) {
+        careGuideHistory.add(0, CareGuideEntry(
+            plantName = name,
+            nickname = nickname,
+            age = age,
+            advice = advice
+        ))
+        activityLog.add(0, ActivityEntry(
+            description = "Searched AI care guide for \"$name\"",
+            icon = "search"
+        ))
+    }
+
+    // Helper: log generic activity
+    fun logActivity(description: String, icon: String = "info") {
+        activityLog.add(0, ActivityEntry(description = description, icon = icon))
+    }
+
+    // Selected custom plant for dashboard
+    var selectedCustomPlantId = mutableStateOf<String?>(null)
+}
+
 // ==========================================
-// Plant light types for dashboard screens
+// Plant light types for built-in dashboard screens
 // ==========================================
 enum class PlantLightType {
     UV_LIGHT, NATURAL_LIGHT, NO_LIGHT
 }
 
-// Shared holder for which plant dashboard to display
 object PlantDashboardHolder {
     var selectedPlant: PlantLightType = PlantLightType.UV_LIGHT
+    var isCustomPlant: Boolean = false
 }
 
 // ==========================================
@@ -26,7 +164,6 @@ enum class MetricType {
     SOIL_MOISTURE, LIGHT_LEVEL, CO2, HUMIDITY
 }
 
-// Shared holder for which metric report to display
 object MetricReportHolder {
     var selectedMetric: MetricType = MetricType.SOIL_MOISTURE
 }
@@ -76,6 +213,23 @@ fun getPlantDashboardData(type: PlantLightType): PlantDashboardData {
     }
 }
 
+fun getCustomPlantDashboardData(plant: SavedPlant): PlantDashboardData {
+    val label = when {
+        plant.healthScore >= 75 -> "Healthy"
+        plant.healthScore >= 50 -> "Moderate"
+        else -> "Stressed"
+    }
+    return PlantDashboardData(
+        headerTitle = if (plant.nickname.isNotBlank()) plant.nickname else plant.name,
+        healthScore = plant.healthScore,
+        healthLabel = label,
+        soilMoisture = plant.soilMoisture,
+        lightLevel = plant.lightLevel,
+        humidity = plant.humidity,
+        waterReminder = plant.waterReminder
+    )
+}
+
 // ==========================================
 // Report data per plant type + metric type
 // ==========================================
@@ -88,10 +242,7 @@ data class MetricReportData(
     val remindersText: String
 )
 
-fun getMetricReportData(
-    plant: PlantLightType,
-    metric: MetricType
-): MetricReportData {
+fun getMetricReportData(plant: PlantLightType, metric: MetricType): MetricReportData {
     return when (plant) {
         PlantLightType.UV_LIGHT -> getUVMetricData(metric)
         PlantLightType.NATURAL_LIGHT -> getNaturalMetricData(metric)
@@ -99,116 +250,142 @@ fun getMetricReportData(
     }
 }
 
-// --- UV Light report data ---
+fun getCustomPlantMetricData(plant: SavedPlant, metric: MetricType): MetricReportData {
+    val name = if (plant.nickname.isNotBlank()) plant.nickname else plant.name
+    return when (metric) {
+        MetricType.SOIL_MOISTURE -> MetricReportData(
+            title = "Soil Moisture Report",
+            score = 0,
+            scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
+            trendPoints = listOf(0.5f, 0.48f, 0.45f, 0.43f, 0.4f, 0.38f, 0.36f, 0.35f),
+            analysisText = "Soil moisture for $name is currently at ${plant.soilMoisture}. Levels have been gradually declining over the monitoring period.\n\nThe current reading is within the moderate range. Continue monitoring and water when levels approach 20%.\n\nNo abnormal sensor readings detected.",
+            remindersText = "Monitor soil moisture levels regularly.\nRecommended action: ${plant.waterReminder}.\nTip: Maintain consistent watering schedule based on the plant's specific needs."
+        )
+        MetricType.LIGHT_LEVEL -> MetricReportData(
+            title = "Light Level Report",
+            score = 0,
+            scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
+            trendPoints = listOf(0.3f, 0.45f, 0.6f, 0.65f, 0.6f, 0.5f, 0.35f, 0.2f),
+            analysisText = "Current light level for $name: ${plant.lightLevel}.\n\nLight exposure follows a typical diurnal pattern. Ensure the plant receives adequate light for its species requirements.\n\nNo sudden fluctuations detected in the monitoring period.",
+            remindersText = "Maintain current light exposure.\nTip: Adjust positioning based on seasonal changes in natural light availability.\nNext evaluation in 48 hours."
+        )
+        MetricType.CO2 -> MetricReportData(
+            title = "Co2 Report",
+            score = 0,
+            scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
+            trendPoints = listOf(0.45f, 0.47f, 0.44f, 0.48f, 0.46f, 0.45f, 0.47f, 0.46f),
+            analysisText = "CO₂ levels around $name are within normal indoor range.\n\nAverage concentration: ~410 ppm. Levels remain stable throughout the day with minor fluctuations.\n\nGood air circulation is being maintained.",
+            remindersText = "CO₂ levels are normal.\nNo intervention required.\nTip: Ensure adequate ventilation for healthy gas exchange.\nMonitoring continues automatically."
+        )
+        MetricType.HUMIDITY -> MetricReportData(
+            title = "Humidity Report",
+            score = 0,
+            scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
+            trendPoints = listOf(0.5f, 0.48f, 0.47f, 0.45f, 0.46f, 0.44f, 0.45f, 0.43f),
+            analysisText = "Current humidity around $name: ${plant.humidity}.\n\nHumidity levels have been relatively stable. Ensure the environment maintains adequate moisture for the plant's needs.\n\nNo rapid changes detected.",
+            remindersText = "Monitor humidity levels.\nTip: Group plants together to maintain local humidity naturally.\nConsider misting if levels drop below 40%."
+        )
+    }
+}
+
+// ==========================================
+// Built-in metric data (UV, Natural, No Light)
+// ==========================================
 private fun getUVMetricData(metric: MetricType): MetricReportData {
     return when (metric) {
         MetricType.SOIL_MOISTURE -> MetricReportData(
-            title = "Soil Moisture Report",
-            score = 326,
+            title = "Soil Moisture Report", score = 326,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE57373),
             trendPoints = listOf(0.6f, 0.55f, 0.5f, 0.45f, 0.42f, 0.38f, 0.35f, 0.3f),
-            analysisText = "Soil moisture levels have declined steadily over the past 72 hours, dropping from 42% to 19% volumetric water content. The current reading places this plant in the lower moderate stress range.\n\nThe rate of decline suggests increased transpiration relative to recent days, potentially influenced by elevated leaf temperature and consistent light exposure.\n\nIf current conditions persist, projected soil moisture is expected to fall below 15% within the next 24 hours, entering severe stress territory.\n\nNo abnormal sensor fluctuations detected.\nData consistency is within expected range.",
-            remindersText = "Moderate water stress detected.\nRecommended action: Water within the next 12 hours to restore soil moisture to 35–45%.\nLast watering event: 4 days ago.\nReminder scheduled: Tomorrow at 9:00 AM if no intervention is logged.\nTip: Ensure even saturation throughout the soil column. Avoid surface-only watering."
+            analysisText = "Soil moisture levels have declined steadily over the past 72 hours, dropping from 42% to 19%.\n\nThe rate of decline suggests increased transpiration. If conditions persist, soil moisture may fall below 15% within 24 hours.\n\nNo abnormal sensor fluctuations detected.",
+            remindersText = "Moderate water stress detected.\nWater within 12 hours to restore soil moisture to 35–45%.\nLast watering: 4 days ago.\nTip: Ensure even saturation throughout the soil."
         )
         MetricType.LIGHT_LEVEL -> MetricReportData(
-            title = "Light Level Report",
-            score = 0,
+            title = "Light Level Report", score = 0,
             scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
             trendPoints = listOf(0.3f, 0.35f, 0.4f, 0.38f, 0.42f, 0.4f, 0.38f, 0.35f),
-            analysisText = "Average light exposure over the past 24 hours has remained at 6,200 lux, slightly below the optimal range for this species (8,000–12,000 lux).\n\nLight intensity has been consistent but reduced during afternoon hours, likely due to indirect positioning relative to the primary light source.\n\nNo sudden light fluctuations detected.\nDuration of exposure remains stable at approximately 8 hours per day.\n\nIf current exposure persists, photosynthetic activity may decrease over extended periods, particularly under water stress conditions.",
-            remindersText = "Light levels below optimal threshold.\nRecommended action: Relocate plant closer to natural light source or increase artificial grow light duration by 1–2 hours daily.\nNext evaluation scheduled in 48 hours.\nTip: Maintain consistent daily light exposure to prevent stress-related metabolic shifts."
+            analysisText = "Average light exposure: 6,200 lux, slightly below optimal (8,000–12,000 lux).\n\nIntensity reduced during afternoon hours. No sudden fluctuations detected.\n\nProlonged sub-optimal exposure may decrease photosynthetic activity.",
+            remindersText = "Light below optimal threshold.\nRelocate closer to light source or increase grow light by 1–2 hours.\nNext evaluation in 48 hours."
         )
         MetricType.CO2 -> MetricReportData(
-            title = "Co2 Report",
-            score = 1014,
+            title = "Co2 Report", score = 1014,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE6C54A),
             trendPoints = listOf(0.5f, 0.52f, 0.48f, 0.55f, 0.53f, 0.5f, 0.52f, 0.54f),
-            analysisText = "24-Hour Trend Analysis\nAverage CO₂ concentration over the past 24 hours: 416 ppm.\n\nPeak concentration: 428 ppm (evening).\nLowest concentration: 392 ppm (midday).\nCO₂ levels remain stable and consistent with typical indoor atmospheric conditions. No prolonged elevation or depletion events detected.\n\nMinor evening increases may reflect reduced ventilation or increased respiration in enclosed conditions.",
-            remindersText = "Elevated leaf temperatures detected.\nRecommended action: Assess soil moisture and consider watering if below 30%.\nOptional intervention: Reduce direct light intensity during peak hours to minimize thermal stress.\nNext evaluation scheduled in 24 hours.\nMonitoring continues in real time."
+            analysisText = "Average CO₂: 416 ppm. Peak: 428 ppm (evening), Low: 392 ppm (midday).\n\nLevels stable and consistent with indoor conditions. Minor evening increases from reduced ventilation.",
+            remindersText = "CO₂ levels normal.\nAssess soil moisture if below 30%.\nNext evaluation in 24 hours."
         )
         MetricType.HUMIDITY -> MetricReportData(
-            title = "Humidity Report",
-            score = 132,
+            title = "Humidity Report", score = 132,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE57373),
             trendPoints = listOf(0.45f, 0.42f, 0.38f, 0.35f, 0.33f, 0.32f, 0.3f, 0.28f),
-            analysisText = "Ambient humidity is currently 32%, below the optimal range of 45–60% for this species.\n\nHumidity levels have remained consistently low over the past 72 hours, increasing evaporative demand on leaf tissue.\n\nCombined with reduced soil moisture, low humidity may accelerate stress response pathways.\n\nNo rapid environmental fluctuations detected.",
-            remindersText = "Low humidity environment detected.\nRecommended action: Increase ambient humidity using a humidifier or relocate plant away from direct air vents.\nReassessment scheduled in 24 hours.\nTip: Sustained low humidity may lead to leaf edge browning or reduced growth rate."
+            analysisText = "Humidity at 32%, below optimal 45–60%. Consistently low over 72 hours.\n\nCombined with low soil moisture, this may accelerate stress responses.",
+            remindersText = "Low humidity detected.\nUse a humidifier or relocate away from air vents.\nReassessment in 24 hours."
         )
     }
 }
 
-// --- Natural Light report data ---
 private fun getNaturalMetricData(metric: MetricType): MetricReportData {
     return when (metric) {
         MetricType.SOIL_MOISTURE -> MetricReportData(
-            title = "Soil Moisture Report",
-            score = 0,
+            title = "Soil Moisture Report", score = 0,
             scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
             trendPoints = listOf(0.4f, 0.42f, 0.45f, 0.43f, 0.4f, 0.38f, 0.36f, 0.38f),
-            analysisText = "Soil moisture has remained within the moderate range over the past 72 hours, fluctuating between 34% and 42%. The current reading of 38% places this plant within the acceptable range, though trending slightly downward.\n\nEvaporation rates are consistent with the plant's exposure to indirect natural sunlight. Soil drainage appears normal with no signs of waterlogging.\n\nProjected moisture levels suggest watering may be needed within the next 36 hours to maintain optimal hydration.",
-            remindersText = "Soil moisture is within acceptable range.\nRecommended action: Monitor over the next 24 hours. Water if levels drop below 30%.\nLast watering event: 2 days ago.\nTip: Natural light plants benefit from consistent, moderate watering rather than heavy saturation."
+            analysisText = "Soil moisture fluctuating between 34–42%. Current 38% is within acceptable range.\n\nEvaporation consistent with indirect natural sunlight. Watering may be needed within 36 hours.",
+            remindersText = "Soil moisture acceptable.\nMonitor and water if levels drop below 30%.\nLast watered: 2 days ago."
         )
         MetricType.LIGHT_LEVEL -> MetricReportData(
-            title = "Light Level Report",
-            score = 0,
+            title = "Light Level Report", score = 0,
             scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
             trendPoints = listOf(0.3f, 0.5f, 0.7f, 0.75f, 0.7f, 0.5f, 0.3f, 0.15f),
-            analysisText = "Light exposure follows a natural diurnal cycle, peaking at approximately 9,800 lux during midday hours. Average daily exposure over the past 24 hours: 8,400 lux.\n\nThis falls within the optimal range for this species (8,000–12,000 lux). Morning and late afternoon readings are naturally lower due to the sun's angle.\n\nCloud cover caused a brief 20% reduction in light intensity during early afternoon, but overall exposure duration remained at approximately 10 hours.",
-            remindersText = "Light levels are within optimal range.\nNo immediate action required.\nTip: Rotate the plant 90° weekly to ensure even light distribution across all foliage.\nNext evaluation scheduled in 48 hours."
+            analysisText = "Light follows natural diurnal cycle. Peak: 9,800 lux midday. Average: 8,400 lux (within optimal 8,000–12,000 lux).\n\nExposure duration: ~10 hours.",
+            remindersText = "Light levels optimal.\nRotate plant 90° weekly for even distribution.\nNext evaluation in 48 hours."
         )
         MetricType.CO2 -> MetricReportData(
-            title = "Co2 Report",
-            score = 0,
+            title = "Co2 Report", score = 0,
             scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
             trendPoints = listOf(0.45f, 0.43f, 0.4f, 0.38f, 0.42f, 0.45f, 0.48f, 0.46f),
-            analysisText = "24-Hour Trend Analysis\nAverage CO₂ concentration: 405 ppm, consistent with well-ventilated indoor conditions near a window.\n\nPeak concentration: 418 ppm (early morning).\nLowest concentration: 388 ppm (midday, likely due to photosynthetic uptake with ample light).\n\nCO₂ levels show a healthy inverse correlation with light intensity, indicating active photosynthesis during daylight hours.",
-            remindersText = "CO₂ levels are within normal range.\nNo intervention required.\nTip: Ensure adequate ventilation near the plant to maintain healthy gas exchange.\nMonitoring continues automatically."
+            analysisText = "Average CO₂: 405 ppm. Healthy inverse correlation with light intensity indicates active photosynthesis.",
+            remindersText = "CO₂ normal. Maintain adequate ventilation."
         )
         MetricType.HUMIDITY -> MetricReportData(
-            title = "Humidity Report",
-            score = 0,
+            title = "Humidity Report", score = 0,
             scoreColor = androidx.compose.ui.graphics.Color(0xFF66BB6A),
             trendPoints = listOf(0.5f, 0.52f, 0.55f, 0.53f, 0.52f, 0.5f, 0.48f, 0.52f),
-            analysisText = "Ambient humidity is currently 52%, within the optimal range of 45–60% for this species.\n\nHumidity has remained stable over the past 72 hours, benefiting from the plant's proximity to a window with moderate air circulation.\n\nNo rapid fluctuations or dry spells detected. Current conditions support healthy transpiration rates.",
-            remindersText = "Humidity levels are optimal.\nNo immediate action required.\nTip: Grouping plants together can help maintain local humidity levels naturally.\nReassessment scheduled in 48 hours."
+            analysisText = "Humidity at 52%, within optimal 45–60%. Stable over 72 hours with good air circulation.",
+            remindersText = "Humidity optimal. Group plants together to maintain levels naturally."
         )
     }
 }
 
-// --- No Light report data ---
 private fun getNoLightMetricData(metric: MetricType): MetricReportData {
     return when (metric) {
         MetricType.SOIL_MOISTURE -> MetricReportData(
-            title = "Soil Moisture Report",
-            score = 482,
+            title = "Soil Moisture Report", score = 482,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE57373),
             trendPoints = listOf(0.35f, 0.3f, 0.25f, 0.22f, 0.18f, 0.16f, 0.15f, 0.13f),
-            analysisText = "Soil moisture has dropped significantly over the past 72 hours, from 35% down to 15%. The plant is entering the severe stress zone.\n\nWithout light, the plant's metabolic rate is reduced, but soil moisture continues to decline due to ambient evaporation and root absorption.\n\nThe rate of moisture loss is slower than light-exposed plants but still critical given the already low starting point.\n\nImmediate watering is recommended to prevent irreversible root damage.",
-            remindersText = "Severe water stress detected.\nRecommended action: Water immediately to restore soil moisture above 30%.\nLast watering event: 6 days ago.\nReminder: Overdue watering alert active.\nTip: Low-light plants need less frequent but consistent watering. Do not allow soil to fully dry out."
+            analysisText = "Soil moisture dropped from 35% to 15% over 72 hours. Plant entering severe stress zone.\n\nImmediate watering recommended to prevent root damage.",
+            remindersText = "Severe water stress.\nWater immediately to restore above 30%.\nLast watered: 6 days ago."
         )
         MetricType.LIGHT_LEVEL -> MetricReportData(
-            title = "Light Level Report",
-            score = 89,
+            title = "Light Level Report", score = 89,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE57373),
             trendPoints = listOf(0.05f, 0.04f, 0.05f, 0.03f, 0.04f, 0.05f, 0.04f, 0.03f),
-            analysisText = "Light exposure has been near zero over the past 72 hours, averaging approximately 50 lux. This is far below the minimum threshold of 2,000 lux for low-light tolerant species.\n\nThe plant is receiving only ambient room lighting with no direct or indirect natural light exposure.\n\nProlonged absence of light will slow growth, reduce chlorophyll production, and may cause leaf yellowing and drop over time.",
-            remindersText = "Critical: Light exposure far below minimum threshold.\nRecommended action: Relocate plant to an area with at least indirect light, or introduce a grow light for 6–8 hours daily.\nTip: Even shade-tolerant species need some light exposure to maintain basic metabolic functions."
+            analysisText = "Light near zero (~50 lux), far below 2,000 lux minimum.\n\nProlonged absence will cause yellowing and leaf drop.",
+            remindersText = "Critical: relocate to indirect light or use a grow light 6–8 hours daily."
         )
         MetricType.CO2 -> MetricReportData(
-            title = "Co2 Report",
-            score = 1180,
+            title = "Co2 Report", score = 1180,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE57373),
             trendPoints = listOf(0.55f, 0.58f, 0.6f, 0.62f, 0.6f, 0.63f, 0.65f, 0.64f),
-            analysisText = "24-Hour Trend Analysis\nAverage CO₂ concentration: 445 ppm, elevated compared to well-ventilated areas.\n\nPeak concentration: 462 ppm (overnight).\nLowest concentration: 430 ppm (afternoon).\n\nWithout photosynthetic activity due to lack of light, the plant is only respiring, contributing to slightly elevated local CO₂ levels. Poor ventilation in the plant's location may be exacerbating this trend.",
-            remindersText = "Elevated CO₂ levels detected in the plant's vicinity.\nRecommended action: Improve air circulation around the plant.\nOptional: Relocate to a better-ventilated area.\nTip: Without light, plants cannot photosynthesize and will only produce CO₂ through respiration."
+            analysisText = "CO₂ elevated at 445 ppm. Without photosynthesis, plant only respires. Poor ventilation may worsen this.",
+            remindersText = "Improve air circulation. Relocate to a ventilated area."
         )
         MetricType.HUMIDITY -> MetricReportData(
-            title = "Humidity Report",
-            score = 245,
+            title = "Humidity Report", score = 245,
             scoreColor = androidx.compose.ui.graphics.Color(0xFFE57373),
             trendPoints = listOf(0.35f, 0.32f, 0.3f, 0.28f, 0.27f, 0.25f, 0.24f, 0.22f),
-            analysisText = "Ambient humidity is critically low at 28%, well below the optimal range of 45–60% for this species.\n\nHumidity has been declining steadily over the past 72 hours. The plant's enclosed, low-ventilation environment combined with indoor heating is accelerating moisture loss from the air.\n\nLeaf tips may begin browning within 48 hours if conditions are not improved.",
-            remindersText = "Critical low humidity detected.\nRecommended action: Place a humidifier nearby or set the plant on a pebble tray with water.\nAlternative: Mist leaves lightly every 12 hours.\nReassessment scheduled in 12 hours.\nTip: Low-light environments often have poor air circulation, which compounds humidity issues."
+            analysisText = "Humidity critically low at 28%. Declining steadily. Leaf browning may occur within 48 hours.",
+            remindersText = "Use a humidifier or pebble tray. Mist leaves every 12 hours.\nReassessment in 12 hours."
         )
     }
 }

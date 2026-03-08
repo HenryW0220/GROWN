@@ -24,9 +24,6 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Screen that shows AI-generated plant care advice.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
@@ -37,19 +34,29 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
     var aiAdviceText by remember { mutableStateOf("") }
     var isLoadingData by remember { mutableStateOf(true) }
     var errorLabelText by remember { mutableStateOf<String?>(null) }
+    var isAddedToShelf by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
 
-    // UI Style Config
     val screenBg = Color(0xFFF5F7F5)
     val cardContentBg = Color(0xFFE8F5E9)
     val greenPrimary = Color(0xFF4CAF50)
+
+    // Check if already on shelf
+    val alreadyOnShelf = remember {
+        AppState.savedPlants.any {
+            it.name.equals(name, ignoreCase = true) &&
+            it.nickname.equals(nickname, ignoreCase = true)
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
             val response = requestGeminiAdvice(name, age, nickname)
             aiAdviceText = response
             isLoadingData = false
+            // Log the search
+            AppState.logCareGuideSearch(name, nickname, age, response)
         } catch (e: Exception) {
             errorLabelText = e.message
             isLoadingData = false
@@ -88,8 +95,7 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
                     Column {
                         Text(
                             text = if (nickname.isNotBlank()) "$nickname ($name)" else name,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            fontWeight = FontWeight.Bold, fontSize = 18.sp
                         )
                         if (age.isNotBlank()) {
                             Text(text = "Age: $age", fontSize = 14.sp, color = Color.Gray)
@@ -117,24 +123,12 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (isLoadingData) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = greenPrimary)
                         }
                     } else if (errorLabelText != null) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                "Connection failed: $errorLabelText",
-                                color = Color.Red,
-                                fontSize = 14.sp
-                            )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            Text("Connection failed: $errorLabelText", color = Color.Red, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(onClick = {
                                 isLoadingData = true
@@ -143,27 +137,59 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
                                     try {
                                         aiAdviceText = requestGeminiAdvice(name, age, nickname)
                                         isLoadingData = false
+                                        AppState.logCareGuideSearch(name, nickname, age, aiAdviceText)
                                     } catch (e: Exception) {
                                         errorLabelText = e.message
                                         isLoadingData = false
                                     }
                                 }
-                            }) {
-                                Text("Try Again")
-                            }
+                            }) { Text("Try Again") }
                         }
                     } else {
                         Text(
                             text = aiAdviceText,
-                            fontSize = 15.sp,
-                            lineHeight = 24.sp,
+                            fontSize = 15.sp, lineHeight = 24.sp,
                             color = Color(0xFF2D3436)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Add to Plant Shelf button (only show after successful load)
+            if (!isLoadingData && errorLabelText == null) {
+                if (isAddedToShelf || alreadyOnShelf) {
+                    // Already added state
+                    OutlinedButton(
+                        onClick = { },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = false
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Added to Plant Shelf", fontSize = 16.sp)
+                    }
+                } else {
+                    // Add button
+                    Button(
+                        onClick = {
+                            AppState.addPlantToShelf(name, nickname, age, aiAdviceText)
+                            isAddedToShelf = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = greenPrimary)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add to Plant Shelf", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedButton(
                 onClick = { onNavigate(Routes.DASHBOARD) },
@@ -171,30 +197,25 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
             ) {
                 Text("Back to Dashboard")
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
-/**
- * Direct HTTP connection to Google Gemini API.
- * API key is read from BuildConfig (sourced from local.properties).
- */
 suspend fun requestGeminiAdvice(pName: String, pAge: String, pNick: String): String {
     return withContext(Dispatchers.IO) {
-        // Build a smart prompt that skips empty optional fields
         val agePart = if (pAge.isNotBlank()) ", approximately $pAge old" else ""
         val nickPart = if (pNick.isNotBlank()) " (nicknamed $pNick)" else ""
         val promptText = "Act as a professional gardener. Give me short care tips for a $pName$nickPart$agePart. " +
                 "Use sections: Water, Sunlight, Soil. Use bullet points and clear headings."
 
-        // Read API key from BuildConfig (set via local.properties + build.gradle.kts)
         val apiKey = BuildConfig.GEMINI_API_KEY
         if (apiKey.isBlank()) {
             throw Exception("API key not configured. Add GEMINI_API_KEY to local.properties")
         }
 
         val apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
-
         val url = URL(apiUrl)
         val conn = url.openConnection() as HttpURLConnection
 
@@ -205,24 +226,18 @@ suspend fun requestGeminiAdvice(pName: String, pAge: String, pNick: String): Str
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
 
-            // Build JSON body
             val partObj = JSONObject().put("text", promptText)
             val partsArr = JSONArray().put(partObj)
             val contentObj = JSONObject().put("parts", partsArr)
             val contentsArr = JSONArray().put(contentObj)
             val jsonBody = JSONObject().put("contents", contentsArr)
 
-            Log.d("GEMINI_DEBUG", "Request body: ${jsonBody.toString()}")
-
-            // Write request
             val writer = OutputStreamWriter(conn.outputStream, "UTF-8")
             writer.write(jsonBody.toString())
             writer.flush()
             writer.close()
 
             val responseCode = conn.responseCode
-            Log.d("GEMINI_DEBUG", "Response code: $responseCode")
-
             if (responseCode == 200) {
                 val responseText = conn.inputStream.bufferedReader().readText()
                 val root = JSONObject(responseText)
@@ -231,7 +246,7 @@ suspend fun requestGeminiAdvice(pName: String, pAge: String, pNick: String): Str
                 val parts = content.getJSONArray("parts")
                 parts.getJSONObject(0).getString("text")
             } else {
-                val errorStreamText = conn.errorStream?.bufferedReader()?.readText() ?: "No error details"
+                val errorStreamText = conn.errorStream?.bufferedReader()?.readText() ?: "No details"
                 Log.e("GEMINI_DEBUG", "Error $responseCode: $errorStreamText")
                 throw Exception("API Error $responseCode")
             }

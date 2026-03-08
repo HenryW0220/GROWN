@@ -22,15 +22,20 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.DarkText
 import com.example.myapplication.ui.theme.PageBackground
 
-// ==========================================
-// Metric Report Screen
-// ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MetricReportScreen(onNavigate: (String) -> Unit = {}) {
-    val plantType = PlantDashboardHolder.selectedPlant
     val metricType = MetricReportHolder.selectedMetric
-    val data = getMetricReportData(plantType, metricType)
+    val isCustom = PlantDashboardHolder.isCustomPlant
+    val customPlant = if (isCustom) {
+        AppState.savedPlants.find { it.id == AppState.selectedCustomPlantId.value }
+    } else null
+
+    val data = if (isCustom && customPlant != null) {
+        getCustomPlantMetricData(customPlant, metricType)
+    } else {
+        getMetricReportData(PlantDashboardHolder.selectedPlant, metricType)
+    }
 
     Scaffold(
         topBar = {
@@ -54,101 +59,41 @@ fun MetricReportScreen(onNavigate: (String) -> Unit = {}) {
                 .padding(horizontal = 16.dp)
         ) {
             // Trends Section
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White,
-                shadowElevation = 1.dp
-            ) {
+            Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = Color.White, shadowElevation = 1.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Trends",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DarkText
-                        )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("Trends", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = DarkText)
                         if (data.score > 0) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = data.scoreColor
-                            ) {
-                                Text(
-                                    text = "${data.score}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                            Surface(shape = RoundedCornerShape(6.dp), color = data.scoreColor) {
+                                Text("${data.score}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                             }
                         }
                     }
-
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    ReportTrendChart(
-                        dataPoints = data.trendPoints,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                    )
+                    ReportTrendChart(dataPoints = data.trendPoints, modifier = Modifier.fillMaxWidth().height(120.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Current Trends Analysis Section
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White,
-                shadowElevation = 1.dp
-            ) {
+            // Analysis Section
+            Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = Color.White, shadowElevation = 1.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Current Trends Analysis",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = DarkText
-                    )
+                    Text("Current Trends Analysis", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = DarkText)
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = data.analysisText,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        color = Color(0xFF555555)
-                    )
+                    Text(data.analysisText, fontSize = 13.sp, lineHeight = 20.sp, color = Color(0xFF555555))
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Reminders / Notifications Section
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White,
-                shadowElevation = 1.dp
-            ) {
+            // Reminders Section
+            Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = Color.White, shadowElevation = 1.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "REMINDERS / NOTIFICATIONS",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = DarkText,
-                        letterSpacing = 0.5.sp
-                    )
+                    Text("REMINDERS / NOTIFICATIONS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = DarkText, letterSpacing = 0.5.sp)
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = data.remindersText,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        color = Color(0xFF555555)
-                    )
+                    Text(data.remindersText, fontSize = 13.sp, lineHeight = 20.sp, color = Color(0xFF555555))
                 }
             }
 
@@ -157,56 +102,20 @@ fun MetricReportScreen(onNavigate: (String) -> Unit = {}) {
     }
 }
 
-// ==========================================
-// Trend Chart for report screens
-// ==========================================
 @Composable
-fun ReportTrendChart(
-    dataPoints: List<Float>,
-    modifier: Modifier = Modifier
-) {
+fun ReportTrendChart(dataPoints: List<Float>, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
-        val spacing = width / (dataPoints.size - 1)
-        val chartPadding = 8f
-
-        // Horizontal grid lines
-        for (i in 0..4) {
-            val y = chartPadding + (height - chartPadding * 2) * i / 4
-            drawLine(
-                color = Color(0xFFE8E8E0),
-                start = Offset(0f, y),
-                end = Offset(width, y),
-                strokeWidth = 1f
-            )
-        }
-
-        // Line path
+        val w = size.width; val h = size.height; val s = w / (dataPoints.size - 1); val p = 8f
+        for (i in 0..4) { val y = p + (h - p * 2) * i / 4; drawLine(Color(0xFFE8E8E0), Offset(0f, y), Offset(w, y), 1f) }
         val path = Path()
-        dataPoints.forEachIndexed { index, point ->
-            val x = index * spacing
-            val y = chartPadding + (height - chartPadding * 2) * (1 - point)
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        drawPath(path = path, color = Color(0xFF333333), style = Stroke(width = 2.5f))
-
-        // Data points
-        dataPoints.forEachIndexed { index, point ->
-            val x = index * spacing
-            val y = chartPadding + (height - chartPadding * 2) * (1 - point)
-            drawCircle(color = Color(0xFF333333), radius = 4f, center = Offset(x, y))
-        }
+        dataPoints.forEachIndexed { i, pt -> val x = i * s; val y = p + (h - p * 2) * (1 - pt); if (i == 0) path.moveTo(x, y) else path.lineTo(x, y) }
+        drawPath(path, Color(0xFF333333), style = Stroke(2.5f))
+        dataPoints.forEachIndexed { i, pt -> drawCircle(Color(0xFF333333), 4f, Offset(i * s, p + (h - p * 2) * (1 - pt))) }
     }
 }
 
-// ==========================================
-// Preview
-// ==========================================
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun MetricReportScreenPreview() {
-    MaterialTheme {
-        MetricReportScreen()
-    }
+    MaterialTheme { MetricReportScreen() }
 }
