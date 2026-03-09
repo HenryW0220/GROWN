@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,14 +37,15 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
     var isLoadingData by remember { mutableStateOf(true) }
     var errorLabelText by remember { mutableStateOf<String?>(null) }
     var isAddedToShelf by remember { mutableStateOf(false) }
+    var isGeneratingImage by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val screenBg = Color(0xFFF5F7F5)
     val cardContentBg = Color(0xFFE8F5E9)
     val greenPrimary = Color(0xFF4CAF50)
 
-    // Check if already on shelf
     val alreadyOnShelf = remember {
         AppState.savedPlants.any {
             it.name.equals(name, ignoreCase = true) &&
@@ -55,7 +58,6 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
             val response = requestGeminiAdvice(name, age, nickname)
             aiAdviceText = response
             isLoadingData = false
-            // Log the search
             AppState.logCareGuideSearch(name, nickname, age, response)
         } catch (e: Exception) {
             errorLabelText = e.message
@@ -157,10 +159,9 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Add to Plant Shelf button (only show after successful load)
+            // Add to Plant Shelf button
             if (!isLoadingData && errorLabelText == null) {
                 if (isAddedToShelf || alreadyOnShelf) {
-                    // Already added state
                     OutlinedButton(
                         onClick = { },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -169,14 +170,27 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Added to Plant Shelf", fontSize = 16.sp)
+                        Text(if (isGeneratingImage) "Generating image..." else "Added to Plant Shelf", fontSize = 16.sp)
                     }
                 } else {
-                    // Add button
                     Button(
                         onClick = {
+                            // Add plant to shelf (existing logic)
                             AppState.addPlantToShelf(name, nickname, age, aiAdviceText)
                             isAddedToShelf = true
+
+                            // NEW: Generate image in background
+                            isGeneratingImage = true
+                            coroutineScope.launch {
+                                val imagePath = generatePlantImage(name.trim(), context)
+                                if (imagePath != null) {
+                                    PlantImageCache.saveImagePath(name, imagePath)
+                                    Toast.makeText(context, "Plant image generated!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Image generation failed (check Logcat: PLANT_IMAGE)", Toast.LENGTH_LONG).show()
+                                }
+                                isGeneratingImage = false
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(12.dp),

@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +30,7 @@ import com.example.myapplication.ui.theme.CardBackground
 import com.example.myapplication.ui.theme.DarkText
 import com.example.myapplication.ui.theme.GrayText
 import com.example.myapplication.ui.theme.PageBackground
+import java.io.File
 
 // ==========================================
 // Dashboard Screen (Plants page)
@@ -125,7 +128,6 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        // Fill empty space if odd number
                         if (row.size == 1) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
@@ -165,7 +167,6 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
                         )
                     }
 
-                    // Expandable care history
                     if (showCareHistory) {
                         if (careHistory.isEmpty()) {
                             Text(
@@ -246,7 +247,7 @@ fun CareHistoryItem(entry: CareGuideEntry) {
 }
 
 // ==========================================
-// Saved plant card for dashboard grid
+// Saved plant card - NOW SHOWS AI GENERATED IMAGE
 // ==========================================
 @Composable
 fun SavedPlantDashboardCard(
@@ -255,6 +256,16 @@ fun SavedPlantDashboardCard(
     modifier: Modifier = Modifier
 ) {
     val displayName = if (plant.nickname.isNotBlank()) plant.nickname else plant.name
+
+    // Check PlantImageCache for a generated image
+    val imagePath = PlantImageCache.getImagePath(plant.name)
+    val bitmap = remember(imagePath) {
+        if (imagePath != null) {
+            val file = File(imagePath)
+            if (file.exists()) BitmapFactory.decodeFile(imagePath) else null
+        } else null
+    }
+
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             modifier = Modifier
@@ -265,21 +276,50 @@ fun SavedPlantDashboardCard(
             shadowElevation = 2.dp,
             color = Color(0xFFF5F5EC)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Eco, contentDescription = displayName,
-                        tint = Color(0xFF4CAF50), modifier = Modifier.size(48.dp)
+            if (bitmap != null) {
+                // Show AI-generated image
+                Box {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = displayName,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    // Health badge
-                    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF4CAF50).copy(alpha = 0.15f)) {
+                    // Health score badge overlay
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF4CAF50).copy(alpha = 0.85f),
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp)
+                    ) {
                         Text(
                             "${plant.healthScore}%",
                             fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4CAF50),
+                            color = Color.White,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
+                    }
+                }
+            } else {
+                // Fallback: show icon (same as before)
+                Box(contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Eco, contentDescription = displayName,
+                            tint = Color(0xFF4CAF50), modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF4CAF50).copy(alpha = 0.15f)) {
+                            Text(
+                                "${plant.healthScore}%",
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
             }
