@@ -41,6 +41,7 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val db = remember { PlantCareDatabase.getDatabase(context) }
 
     val screenBg = Color(0xFFF5F7F5)
     val cardContentBg = Color(0xFFE8F5E9)
@@ -59,6 +60,16 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
             aiAdviceText = response
             isLoadingData = false
             AppState.logCareGuideSearch(name, nickname, age, response)
+
+            // Save to Room database for Care Guide history
+            db.careGuideDao().insertGuide(
+                CareGuideEntity(
+                    plantName = name,
+                    plantAge = age,
+                    plantNickname = nickname,
+                    aiAdvice = response
+                )
+            )
         } catch (e: Exception) {
             errorLabelText = e.message
             isLoadingData = false
@@ -137,9 +148,20 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
                                 errorLabelText = null
                                 coroutineScope.launch {
                                     try {
-                                        aiAdviceText = requestGeminiAdvice(name, age, nickname)
+                                        val response = requestGeminiAdvice(name, age, nickname)
+                                        aiAdviceText = response
                                         isLoadingData = false
-                                        AppState.logCareGuideSearch(name, nickname, age, aiAdviceText)
+                                        AppState.logCareGuideSearch(name, nickname, age, response)
+
+                                        // Save to Room database on retry
+                                        db.careGuideDao().insertGuide(
+                                            CareGuideEntity(
+                                                plantName = name,
+                                                plantAge = age,
+                                                plantNickname = nickname,
+                                                aiAdvice = response
+                                            )
+                                        )
                                     } catch (e: Exception) {
                                         errorLabelText = e.message
                                         isLoadingData = false
@@ -175,11 +197,10 @@ fun PlantCareResultScreen(onNavigate: (String) -> Unit = {}) {
                 } else {
                     Button(
                         onClick = {
-                            // Add plant to shelf (existing logic)
                             AppState.addPlantToShelf(name, nickname, age, aiAdviceText)
                             isAddedToShelf = true
 
-                            // NEW: Generate image in background
+                            // Generate image in background
                             isGeneratingImage = true
                             coroutineScope.launch {
                                 val imagePath = generatePlantImage(name.trim(), context)

@@ -3,39 +3,35 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.devtools.ksp") version "2.2.10-2.0.2"
 }
 
 android {
     namespace = "com.example.myapplication"
-    // Set a standard compileSdk to avoid custom DSL errors
     compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.myapplication"
-        minSdk = 21
+        minSdk = 23
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // --- FIXED API KEY LOADING LOGIC ---
-        // We use Properties() from java.util import
+        // --- API KEY LOADING LOGIC ---
         val props = Properties()
         val propsFile = rootProject.file("local.properties")
 
         var geminiKey = ""
         if (propsFile.exists()) {
-            // Use a stable, classic way to load the file to avoid "Cannot infer type" errors
             val input = propsFile.inputStream()
             props.load(input)
             input.close()
             geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
         }
 
-        // This line injects the key into your Kotlin code as BuildConfig.GEMINI_API_KEY
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
-        // --- END ---
     }
 
     buildTypes {
@@ -55,7 +51,6 @@ android {
 
     buildFeatures {
         compose = true
-        // ✨ CRITICAL: This generates the BuildConfig class for your project
         buildConfig = true
     }
 }
@@ -77,4 +72,9 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation("androidx.compose.material:material-icons-extended")
+
+    // Room Database
+    implementation("androidx.room:room-runtime:2.7.1")
+    implementation("androidx.room:room-ktx:2.7.1")
+    ksp("androidx.room:room-compiler:2.7.1")
 }
