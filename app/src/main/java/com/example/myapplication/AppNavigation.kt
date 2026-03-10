@@ -17,6 +17,9 @@ object Routes {
     const val PLANT_CARE_RESULT = "plant_care_result"
     const val CARE_GUIDE_DETAIL = "care_guide_detail"
     const val METRIC_REPORT = "metric_report"
+    const val RESOURCES = "resources"
+    const val HISTORY = "history"
+    const val CARE_GUIDE_AI_SEARCH = "care_guide_ai_search"
 }
 
 // ==========================================
@@ -50,6 +53,15 @@ fun PlantApp() {
                 onNavigate = { currentScreen = it }
             )
             Routes.METRIC_REPORT -> MetricReportScreen(
+                onNavigate = { currentScreen = it }
+            )
+            Routes.RESOURCES -> ResourcesScreen(
+                onNavigate = { currentScreen = it }
+            )
+            Routes.HISTORY -> HistoryScreen(
+                onNavigate = { currentScreen = it }
+            )
+            Routes.CARE_GUIDE_AI_SEARCH -> CareGuideAiSearchScreen(
                 onNavigate = { currentScreen = it }
             )
             Routes.TRENDS -> TrendsScreen(

@@ -1,6 +1,5 @@
 package com.example.myapplication
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -9,20 +8,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,27 +28,10 @@ import com.example.myapplication.ui.theme.DarkText
 import com.example.myapplication.ui.theme.GrayText
 import com.example.myapplication.ui.theme.PageBackground
 
-// ==========================================
-// Dashboard Screen (Plants page)
-// ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
-    val context = LocalContext.current
-    val db = remember { PlantCareDatabase.getDatabase(context) }
-
-    // Load saved care guides from database
-    var careGuides by remember { mutableStateOf<List<CareGuideEntity>>(emptyList()) }
-    var isCareGuideExpanded by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        careGuides = db.careGuideDao().getAllGuides()
-    }
-
-    // Refresh guides when returning to this screen
-    LaunchedEffect(careGuides) {
-        // This will re-compose when careGuides changes
-    }
+    val savedPlants = AppState.savedPlants
 
     Scaffold(
         bottomBar = { BottomNavBar(currentRoute = Routes.DASHBOARD, onNavigate = onNavigate) },
@@ -76,7 +56,6 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // First row: UV Light, Natural Light
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -97,7 +76,6 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Second row: No Light, Add Plant
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -114,101 +92,93 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
                 )
             }
 
+            if (savedPlants.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "My Plants",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = DarkText,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    savedPlants.take(2).forEach { plant ->
+                        DashboardPlantCard(
+                            label = if (plant.nickname.isNotBlank()) plant.nickname else plant.name,
+                            imageRes = R.drawable.add,
+                            onClick = {
+                                PlantDashboardHolder.isCustomPlant = true
+                                PlantDashboardHolder.selectedPlant = PlantLightType.UV_LIGHT
+                                AppState.selectedCustomPlantId.value = plant.id
+                                onNavigate(Routes.UV_LIGHT_DASHBOARD)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (savedPlants.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ==========================================
-            // Care Guide section - expandable with saved guides
-            // ==========================================
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 color = CardBackground,
                 border = BorderStroke(1.dp, Color(0xFFD5D5C0))
             ) {
-                Column {
-                    // Header row - toggles expand/collapse
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isCareGuideExpanded = !isCareGuideExpanded }
-                            .padding(horizontal = 16.dp, vertical = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Eco,
-                            contentDescription = "Care Guide",
-                            tint = DarkText,
-                            modifier = Modifier.size(32.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigate(Routes.CARE_GUIDE_AI_SEARCH) }
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Care Search",
+                        tint = DarkText,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Care Guide",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DarkText
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Care Guide",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = DarkText
-                            )
-                            if (careGuides.isNotEmpty()) {
-                                Text(
-                                    text = "${careGuides.size} saved",
-                                    fontSize = 13.sp,
-                                    color = GrayText
-                                )
-                            }
-                        }
-                        Icon(
-                            imageVector = if (isCareGuideExpanded) Icons.Default.KeyboardArrowUp
-                            else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isCareGuideExpanded) "Collapse" else "Expand",
-                            tint = GrayText,
-                            modifier = Modifier.size(24.dp)
+                        Text(
+                            text = "Search plant care tips with AI",
+                            fontSize = 13.sp,
+                            color = GrayText
                         )
                     }
-
-                    // Expandable content - list of saved care guides
-                    AnimatedVisibility(visible = isCareGuideExpanded) {
-                        Column(
-                            modifier = Modifier.padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = 16.dp
-                            )
-                        ) {
-                            if (careGuides.isEmpty()) {
-                                // Empty state
-                                Text(
-                                    text = "No care guides yet. Add a plant to get AI care tips!",
-                                    fontSize = 14.sp,
-                                    color = GrayText,
-                                    modifier = Modifier.padding(vertical = 8.dp)
-                                )
-                            } else {
-                                // Show each saved care guide as a clickable card
-                                careGuides.forEach { guide ->
-                                    CareGuideListItem(
-                                        guide = guide,
-                                        onClick = {
-                                            PlantDataHolder.selectedGuideId = guide.id
-                                            onNavigate(Routes.CARE_GUIDE_DETAIL)
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                            }
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Open AI search",
+                        tint = GrayText,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Resources and History buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
-                    onClick = { },
+                    onClick = { onNavigate(Routes.RESOURCES) },
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, Color(0xFFD5D5C0)),
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = CardBackground),
@@ -219,7 +189,7 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
                     Text("Resources", color = DarkText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 OutlinedButton(
-                    onClick = { },
+                    onClick = { onNavigate(Routes.HISTORY) },
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, Color(0xFFD5D5C0)),
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = CardBackground),
@@ -236,69 +206,6 @@ fun DashboardScreen(onNavigate: (String) -> Unit = {}) {
     }
 }
 
-// ==========================================
-// Single care guide list item (clickable)
-// ==========================================
-@Composable
-fun CareGuideListItem(
-    guide: CareGuideEntity,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
-        color = Color.White,
-        shadowElevation = 1.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Sparkle icon
-            Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = null,
-                tint = Color(0xFFFFB300),
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                // Plant name
-                Text(
-                    text = if (guide.plantNickname.isNotBlank()) {
-                        "${guide.plantNickname} (${guide.plantName})"
-                    } else {
-                        guide.plantName
-                    },
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = DarkText
-                )
-                // Preview of AI advice (first line)
-                Text(
-                    text = guide.aiAdvice.take(80) + if (guide.aiAdvice.length > 80) "..." else "",
-                    fontSize = 13.sp,
-                    color = GrayText,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "View details",
-                tint = GrayText,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-// ==========================================
-// Dashboard plant card
-// ==========================================
 @Composable
 fun DashboardPlantCard(
     label: String,
@@ -329,9 +236,6 @@ fun DashboardPlantCard(
     }
 }
 
-// ==========================================
-// Add Plant card
-// ==========================================
 @Composable
 fun AddPlantCard(
     onClick: () -> Unit,

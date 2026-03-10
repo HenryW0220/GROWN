@@ -293,3 +293,59 @@ suspend fun requestGeminiAdvice(pName: String, pAge: String, pNick: String): Str
         }
     }
 }
+
+suspend fun requestGeminiCustomPrompt(promptText: String): String {
+    return withContext(Dispatchers.IO) {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isBlank()) {
+            throw Exception("API key not configured. Add GEMINI_API_KEY to local.properties")
+        }
+
+        val apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
+        val url = URL(apiUrl)
+        val conn = url.openConnection() as HttpURLConnection
+
+        try {
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+
+            val reqJson = JSONObject().apply {
+                put("contents", JSONArray().put(JSONObject().apply {
+                    put("parts", JSONArray().put(JSONObject().apply {
+                        put("text", promptText)
+                    }))
+                }))
+            }
+
+            OutputStreamWriter(conn.outputStream).use { it.write(reqJson.toString()) }
+
+            val responseCode = conn.responseCode
+            val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+            val responseText = stream.bufferedReader().use { it.readText() }
+
+            if (responseCode !in 200..299) {
+                throw Exception("HTTP $responseCode: $responseText")
+            }
+
+            val root = JSONObject(responseText)
+            val candidates = root.optJSONArray("candidates")
+            if (candidates == null || candidates.length() == 0) {
+                throw Exception("No response from AI")
+            }
+
+            val text = candidates.getJSONObject(0)
+                .getJSONObject("content")
+                .getJSONArray("parts")
+                .getJSONObject(0)
+                .getString("text")
+
+            text
+        } catch (e: Exception) {
+            Log.e("GEMINI_API", "requestGeminiCustomPrompt failed", e)
+            throw e
+        } finally {
+            conn.disconnect()
+        }
+    }
+}
